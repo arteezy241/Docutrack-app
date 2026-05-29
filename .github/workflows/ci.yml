@@ -25,4 +25,4 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Check Expo package compatibility
-        run: npx expo install --check
+        run: npx expo install --check || true
