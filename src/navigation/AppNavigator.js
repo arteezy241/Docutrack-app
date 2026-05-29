@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
@@ -23,6 +23,15 @@ import useThemeStore from '../store/themeStore';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const NAV_DARK = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: '#0D1117', card: '#0D1117' },
+};
+const NAV_LIGHT = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: '#f0f4f8', card: '#ffffff' },
+};
 
 const TAB_META = {
   Dashboard: { icon: 'grid',                       outline: 'grid-outline' },
@@ -343,7 +352,7 @@ export default function AppNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1b2838' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0D1117' }}>
         <ActivityIndicator size="large" color="#4F46E5" />
       </View>
     );
@@ -351,8 +360,8 @@ export default function AppNavigator() {
 
   return (
     <SafeAreaProvider>
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: T.bgPage } }}>
+    <NavigationContainer theme={T.isDark ? NAV_DARK : NAV_LIGHT}>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: T.isDark ? '#0D1117' : '#f0f4f8' } }}>
         {!token ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
