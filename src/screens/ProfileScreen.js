@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,19 @@ import {
   ActivityIndicator,
   Switch,
   Animated,
+  Easing,
 } from 'react-native';
-import client from '../api/client';
 import { LinearGradient } from 'expo-linear-gradient';
+import client from '../api/client';
 import useAuthStore from '../store/authStore';
 import useThemeStore from '../store/themeStore';
+
+const EASE = Easing.bezier(0.32, 0.72, 0, 1);
+
 export default function ProfileScreen({ navigation }) {
   const { user, setUser, logout } = useAuthStore();
-  const T = useThemeStore();
-  const { isDark, toggleTheme } = T;
+  const T = useThemeStore((state) => state);
+
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [username, setUsername] = useState(user?.username || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -27,15 +31,24 @@ export default function ProfileScreen({ navigation }) {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [twoFaLoading, setTwoFaLoading] = useState(false);
   const [twoFaEnabled, setTwoFaEnabled] = useState(user?.isTwoFactorEnabled || false);
-  const fadeAnim  = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(24)).current;
 
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-    ]).start();
+  // Staggered entrance — one orchestrated sequence
+  const anims = React.useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
+  useEffect(() => {
+    Animated.stagger(
+      70,
+      anims.map((a) =>
+        Animated.timing(a, { toValue: 1, duration: 360, easing: EASE, useNativeDriver: true })
+      )
+    ).start();
   }, []);
+
+  const animStyle = (i) => ({
+    opacity: anims[i],
+    transform: [
+      { translateY: anims[i].interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
+    ],
+  });
 
   const handleUpdateProfile = async () => {
     if (!fullName.trim() || !username.trim()) {
@@ -46,7 +59,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       await client.patch('/Users/profile', { fullName, username });
       setUser({ ...user, fullName, username });
-      Alert.alert('Success', 'Profile updated successfully.');
+      Alert.alert('Saved', 'Your profile has been updated.');
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to update profile.');
     } finally {
@@ -65,13 +78,10 @@ export default function ProfileScreen({ navigation }) {
     }
     setPasswordLoading(true);
     try {
-      await client.post('/auth/change-password', {
-        currentPassword,
-        newPassword,
-      });
+      await client.post('/auth/change-password', { currentPassword, newPassword });
       setCurrentPassword('');
       setNewPassword('');
-      Alert.alert('Success', 'Password changed successfully.');
+      Alert.alert('Done', 'Password changed successfully.');
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to change password.');
     } finally {
@@ -85,10 +95,6 @@ export default function ProfileScreen({ navigation }) {
       const res = await client.patch('/auth/2fa/toggle');
       setTwoFaEnabled(res.data.isTwoFactorEnabled);
       setUser({ ...user, isTwoFactorEnabled: res.data.isTwoFactorEnabled });
-      Alert.alert(
-        'Success',
-        `Two-factor authentication ${res.data.isTwoFactorEnabled ? 'enabled' : 'disabled'}.`
-      );
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to toggle 2FA.');
     } finally {
@@ -96,7 +102,7 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -110,171 +116,166 @@ export default function ProfileScreen({ navigation }) {
     ]);
   };
 
-  const getRoleBadgeColor = (role) => {
-    const map = {
-      Admin: { bg: 'rgba(129,140,248,0.15)', color: '#818cf8' },
-      Staff: { bg: 'rgba(74,222,128,0.12)', color: '#4ade80' },
-      Viewer: { bg: 'rgba(143,152,160,0.12)', color: T.textMuted },
-    };
-    return map[role] || map['Viewer'];
+  const roleStyles = {
+    Admin:  { bg: 'rgba(129,140,248,0.15)', color: '#818cf8' },
+    Staff:  { bg: 'rgba(74,222,128,0.12)',  color: '#4ade80' },
+    Viewer: { bg: 'rgba(143,152,160,0.12)', color: T.textMuted },
   };
-
-  const roleColors = getRoleBadgeColor(user?.role);
+  const role = roleStyles[user?.role] || roleStyles.Viewer;
 
   const S = styles(T);
+
   return (
     <ScrollView style={S.container} contentContainerStyle={S.inner}>
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-      {/* Avatar & Info */}
-      <View style={S.avatarCard}>
-        <View style={S.avatar}>
-          <Text style={S.avatarText}>
-            {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
-          </Text>
+      {/* Header — avatar + identity */}
+      <Animated.View style={[S.identity, animStyle(0)]}>
+        <View style={S.avatarWrap}>
+          <LinearGradient
+            colors={['#47bfff', '#4F46E5']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={S.avatar}
+          >
+            <Text style={S.avatarText}>
+              {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
+            </Text>
+          </LinearGradient>
         </View>
-        <Text style={S.avatarName}>{user?.fullName}</Text>
-        <Text style={S.avatarEmail}>{user?.email}</Text>
-        <View style={[S.roleBadge, { backgroundColor: roleColors.bg }]}>
-          <Text style={[S.roleText, { color: roleColors.color }]}>{user?.role}</Text>
+        <Text style={S.name}>{user?.fullName}</Text>
+        <Text style={S.email}>{user?.email}</Text>
+        <View style={[S.rolePill, { backgroundColor: role.bg }]}>
+          <Text style={[S.roleText, { color: role.color }]}>{user?.role}</Text>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Update Profile */}
-      <View style={S.section}>
-        <Text style={S.sectionTitle}>Edit Profile</Text>
-        <View style={S.card}>
-          <Text style={S.label}>Full Name</Text>
-          <TextInput
-            style={S.input}
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Full name"
-            placeholderTextColor={T.textMuted}
-          />
-          <Text style={S.label}>Username</Text>
-          <TextInput
-            style={S.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Username"
-            placeholderTextColor={T.textMuted}
-            autoCapitalize="none"
-          />
+      {/* PERSONAL INFO */}
+      <Animated.View style={animStyle(1)}>
+        <Text style={S.sectionHeader}>Personal Info</Text>
+        <View style={S.group}>
+          <View style={S.row}>
+            <Text style={S.rowLabel}>Full Name</Text>
+            <TextInput
+              style={S.rowInput}
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="Full name"
+              placeholderTextColor={T.textMuted}
+            />
+          </View>
+          <View style={S.rowDivider} />
+          <View style={S.row}>
+            <Text style={S.rowLabel}>Username</Text>
+            <TextInput
+              style={S.rowInput}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Username"
+              placeholderTextColor={T.textMuted}
+              autoCapitalize="none"
+            />
+          </View>
+          <View style={S.rowDivider} />
           <TouchableOpacity
             onPress={handleUpdateProfile}
             disabled={profileLoading}
-            style={{ borderRadius: 10, marginTop: 4, opacity: profileLoading ? 0.6 : 1 }}
+            style={{ opacity: profileLoading ? 0.6 : 1 }}
           >
             <LinearGradient
               colors={['#47bfff', '#4F46E5']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={S.primaryBtn}
+              style={S.actionRow}
             >
-              {profileLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={S.primaryBtnText}>Save Changes</Text>
-              )}
+              {profileLoading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={S.actionRowText}>Save Changes</Text>}
             </LinearGradient>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Change Password */}
-      <View style={S.section}>
-        <Text style={S.sectionTitle}>Change Password</Text>
-        <View style={S.card}>
-          <Text style={S.label}>Current Password</Text>
-          <TextInput
-            style={S.input}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            placeholder="Current password"
-            placeholderTextColor={T.textMuted}
-            secureTextEntry
-          />
-          <Text style={S.label}>New Password</Text>
-          <TextInput
-            style={S.input}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            placeholder="New password (8+ chars)"
-            placeholderTextColor={T.textMuted}
-            secureTextEntry
-          />
+      {/* CHANGE PASSWORD */}
+      <Animated.View style={animStyle(2)}>
+        <Text style={S.sectionHeader}>Change Password</Text>
+        <View style={S.group}>
+          <View style={S.row}>
+            <Text style={S.rowLabel}>Current</Text>
+            <TextInput
+              style={S.rowInput}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder="Current password"
+              placeholderTextColor={T.textMuted}
+              secureTextEntry
+            />
+          </View>
+          <View style={S.rowDivider} />
+          <View style={S.row}>
+            <Text style={S.rowLabel}>New</Text>
+            <TextInput
+              style={S.rowInput}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder="At least 8 characters"
+              placeholderTextColor={T.textMuted}
+              secureTextEntry
+            />
+          </View>
+          <View style={S.rowDivider} />
           <TouchableOpacity
             onPress={handleChangePassword}
             disabled={passwordLoading}
-            style={{ borderRadius: 10, marginTop: 4, opacity: passwordLoading ? 0.6 : 1 }}
+            style={{ opacity: passwordLoading ? 0.6 : 1 }}
           >
             <LinearGradient
               colors={['#47bfff', '#4F46E5']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={S.primaryBtn}
+              style={S.actionRow}
             >
-              {passwordLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={S.primaryBtnText}>Change Password</Text>
-              )}
+              {passwordLoading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={S.actionRowText}>Update Password</Text>}
             </LinearGradient>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* 2FA Toggle */}
-      <View style={S.section}>
-        <Text style={S.sectionTitle}>Security</Text>
-        <View style={S.card}>
+      {/* PREFERENCES */}
+      <Animated.View style={animStyle(3)}>
+        <Text style={S.sectionHeader}>Preferences</Text>
+        <View style={S.group}>
           <View style={S.toggleRow}>
-            <View>
-              <Text style={S.toggleLabel}>Two-Factor Authentication</Text>
+            <View style={S.toggleTextWrap}>
+              <Text style={S.toggleLabel}>Two-Factor Auth</Text>
               <Text style={S.toggleSub}>
-                {twoFaEnabled ? 'Enabled — extra security on login' : 'Disabled — turn on for extra security'}
+                {twoFaEnabled ? 'Email code required on new devices' : 'Off'}
               </Text>
             </View>
-            {twoFaLoading ? (
-              <ActivityIndicator color="#4F46E5" size="small" />
-            ) : (
-              <Switch
-                value={twoFaEnabled}
-                onValueChange={handleToggle2FA}
-                trackColor={{ false: 'rgba(255,255,255,0.1)', true: '#4F46E5' }}
-                thumbColor="#fff"
-              />
-            )}
-          </View>
-
-          <View style={[S.divider]} />
-
-          <View style={S.toggleRow}>
-            <View>
-              <Text style={S.toggleLabel}>Dark Mode</Text>
-              <Text style={S.toggleSub}>
-                {isDark ? 'Dark theme enabled' : 'Light theme enabled'}
-              </Text>
-            </View>
-            <Switch
-              value={isDark}
-              onValueChange={toggleTheme}
-              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#4F46E5' }}
-              thumbColor="#fff"
-            />
+            {twoFaLoading
+              ? <ActivityIndicator color={T.accent} size="small" />
+              : <Switch
+                  value={twoFaEnabled}
+                  onValueChange={handleToggle2FA}
+                  trackColor={{ false: T.borderInput, true: '#4F46E5' }}
+                  thumbColor="#fff"
+                  ios_backgroundColor={T.borderInput}
+                />}
           </View>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Sign Out */}
-      <View style={S.section}>
-        <TouchableOpacity style={S.signOutBtn} onPress={handleLogout}>
-          <Text style={S.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
-      </View>
+      {/* SIGN OUT — destructive standalone row */}
+      <Animated.View style={animStyle(4)}>
+        <View style={[S.group, { marginTop: 8 }]}>
+          <TouchableOpacity style={S.signOutRow} onPress={handleLogout}>
+            <Text style={S.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
 
-    </Animated.View>
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -282,134 +283,159 @@ export default function ProfileScreen({ navigation }) {
 const styles = (T) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: T.bgPage
+    backgroundColor: T.bgPage,
   },
   inner: {
-    padding: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
-  avatarCard: {
+
+  // Identity header
+  identity: {
     alignItems: 'center',
-    marginBottom: 28,
-    backgroundColor: T.bgCard,
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: T.border,
+    marginBottom: 32,
+  },
+  avatarWrap: {
+    marginBottom: 14,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4F46E5',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '700',
     color: '#fff',
+    letterSpacing: -1,
   },
-  avatarName: {
+  name: {
     fontSize: 22,
     fontWeight: '700',
     color: T.textPrimary,
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
-  avatarEmail: {
-    fontSize: 13,
+  email: {
+    fontSize: 14,
     color: T.textMuted,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  roleBadge: {
-    borderRadius: 8,
+  rolePill: {
+    borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 5,
   },
   roleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  // Section header — uppercase small caps muted
+  sectionHeader: {
     fontSize: 12,
-    fontWeight: '700',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: T.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 10,
+    letterSpacing: 0.8,
+    marginLeft: 16,
+    marginBottom: 8,
+    marginTop: 16,
   },
-  card: {
-   backgroundColor: T.bgCard,
+
+  // Grouped inset card
+  group: {
+    backgroundColor: T.bgCard,
     borderRadius: 14,
-    padding: 18,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: T.border,
   },
-  label: {
-    fontSize: 12,
-    color: T.textMuted,
-    marginBottom: 6,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: T.bgInput,
-    borderWidth: 1,
-    borderColor: T.borderInput,
-    borderRadius: 10,
-    padding: 12,
-    color: T.textPrimary,
-    fontSize: 14,
-    marginBottom: 14,
-  },
-  primaryBtn: {
-    borderRadius: 10,
-    padding: 13,
+
+  // Form rows
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 48,
   },
-  primaryBtnText: {
+  rowLabel: {
+    fontSize: 15,
+    color: T.textPrimary,
+    fontWeight: '500',
+    width: 96,
+  },
+  rowInput: {
+    flex: 1,
+    fontSize: 15,
+    color: T.textPrimary,
+    padding: 0,
+    textAlign: 'right',
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: T.divider,
+    marginLeft: 16,
+  },
+
+  // Inline action row (gradient button inside group)
+  actionRow: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionRowText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
+
+  // Toggle row
   toggleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 56,
+  },
+  toggleTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   toggleLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
     color: T.textPrimary,
-    marginBottom: 4,
-    flex: 1,
+    fontWeight: '500',
+    marginBottom: 2,
   },
   toggleSub: {
     fontSize: 12,
     color: T.textMuted,
-    flex: 1,
-    paddingRight: 12,
   },
-  signOutBtn: {
-    backgroundColor: 'rgba(248,113,113,0.12)',
-    borderRadius: 12,
-    padding: 16,
+
+  // Sign out destructive
+  signOutRow: {
+    paddingVertical: 14,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(248,113,113,0.2)',
+    justifyContent: 'center',
   },
   signOutText: {
     color: '#f87171',
-    fontWeight: '700',
     fontSize: 15,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: T.divider,
-    marginVertical: 12,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
 });

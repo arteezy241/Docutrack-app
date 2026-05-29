@@ -33,6 +33,7 @@ const TAB_META = {
 
 function FloatingTabBar({ state, navigation }) {
   const T = useThemeStore((s) => s);
+  const { isDark, toggleTheme } = T;
   const insets = useSafeAreaInsets();
 
   const scaleAnims = React.useRef(
@@ -91,6 +92,14 @@ function FloatingTabBar({ state, navigation }) {
           );
         })}
       </View>
+
+      <TouchableOpacity style={TS.themeBtn} onPress={toggleTheme} activeOpacity={0.6}>
+        <Ionicons
+          name={isDark ? 'sunny-outline' : 'moon-outline'}
+          size={18}
+          color={T.textMuted}
+        />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -137,6 +146,19 @@ const tabStyles = (T) => StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  themeBtn: {
+    position: 'absolute',
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(23,26,33,0.96)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
   },
 });
 function MoreModalScreen({ navigation }) {
