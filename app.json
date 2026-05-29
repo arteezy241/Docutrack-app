@@ -16,6 +16,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.arteezy241.docutrack",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -28,6 +29,13 @@
     "plugins": [
       "expo-router",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f543ca94-0922-48e4-86a1-54c51b3d3e20"
+      }
+    },
+    "owner": "arteezy241"
   }
 }
