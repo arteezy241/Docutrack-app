@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAuthStore from '../store/authStore';
-import client from '../api/client';
 import LoginScreen from '../screens/LoginScreen';
 import OtpVerifyScreen from '../screens/OtpVerifyScreen';
 import DashboardScreen from '../screens/DashboardScreen';
@@ -24,25 +24,141 @@ import useThemeStore from '../store/themeStore';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function TabIcon({ label, focused, color }) {
-  const icons = {
-    Dashboard: focused ? 'grid'             : 'grid-outline',
-    Documents: focused ? 'document-text'    : 'document-text-outline',
-    Routing:   focused ? 'checkmark-circle' : 'checkmark-circle-outline',
-    Profile:   focused ? 'person'           : 'person-outline',
-    More:      focused ? 'ellipsis-horizontal-circle' : 'ellipsis-horizontal-circle-outline',
+const TAB_META = {
+  Dashboard: { icon: 'grid',                       outline: 'grid-outline' },
+  Documents: { icon: 'document-text',              outline: 'document-text-outline' },
+  Profile:   { icon: 'person',                     outline: 'person-outline' },
+  More:      { icon: 'ellipsis-horizontal-circle', outline: 'ellipsis-horizontal-circle-outline' },
+};
+
+function FloatingTabBar({ state, navigation }) {
+  const T = useThemeStore((s) => s);
+  const insets = useSafeAreaInsets();
+
+  const scaleAnims = React.useRef(
+    state.routes.map(() => new Animated.Value(1))
+  ).current;
+
+  const handlePress = (route, index) => {
+    Animated.sequence([
+      Animated.timing(scaleAnims[index], { toValue: 0.82, duration: 90, useNativeDriver: true }),
+      Animated.spring(scaleAnims[index], { toValue: 1, tension: 200, friction: 10, useNativeDriver: true }),
+    ]).start();
+
+    if (route.name === 'More') {
+      navigation.navigate('MoreModal');
+      return;
+    }
+    if (state.index !== index) {
+      navigation.navigate(route.name);
+    }
   };
-  return <Ionicons name={icons[label]} size={22} color={color} />;
+
+  const TS = tabStyles(T);
+
+  return (
+    <View style={[TS.container, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
+      <View style={TS.pill}>
+        {state.routes.map((route, index) => {
+          const meta = TAB_META[route.name];
+          if (!meta) return null;
+          const isFocused = state.index === index && route.name !== 'More';
+
+          return (
+            <TouchableOpacity
+              key={route.name}
+              onPress={() => handlePress(route, index)}
+              activeOpacity={1}
+              style={TS.tabBtn}
+            >
+              <Animated.View style={{ transform: [{ scale: scaleAnims[index] }] }}>
+                {isFocused ? (
+                  <LinearGradient
+                    colors={['#47bfff', '#4F46E5']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={TS.activePill}
+                  >
+                    <Ionicons name={meta.icon} size={22} color="#fff" />
+                  </LinearGradient>
+                ) : (
+                  <View style={TS.inactiveWrap}>
+                    <Ionicons name={meta.outline} size={22} color={T.textMuted} />
+                  </View>
+                )}
+              </Animated.View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
+
+const tabStyles = (T) => StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(23,26,33,0.96)',
+    borderRadius: 40,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#47bfff',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  tabBtn: {
+    width: 60,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activePill: {
+    width: 52,
+    height: 40,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inactiveWrap: {
+    width: 52,
+    height: 40,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 function MoreModalScreen({ navigation }) {
   const { user } = useAuthStore();
   const T = useThemeStore((state) => state);
-  const MS = moreStyles(T);
+
+  const slideAnim = React.useRef(new Animated.Value(60)).current;
+  const fadeAnim  = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   const isAdmin = user?.role === 'Admin';
 
   const options = [
-   {
+    {
       label: 'Approvals',
+      subtitle: 'Pending document approvals',
       icon: 'checkmark-circle-outline',
       screen: 'RoutingStack',
       color: '#4ade80',
@@ -51,6 +167,7 @@ function MoreModalScreen({ navigation }) {
     ...(isAdmin ? [
       {
         label: 'Users',
+        subtitle: 'Manage team members',
         icon: 'people-outline',
         screen: 'UsersScreen',
         color: '#818cf8',
@@ -58,6 +175,7 @@ function MoreModalScreen({ navigation }) {
       },
       {
         label: 'Audit Log',
+        subtitle: 'System activity history',
         icon: 'shield-checkmark-outline',
         screen: 'AuditLogScreen',
         color: '#47bfff',
@@ -66,160 +184,126 @@ function MoreModalScreen({ navigation }) {
     ] : []),
   ];
 
-  return (
-    <TouchableOpacity
-      style={MS.overlay}
-      activeOpacity={1}
-      onPress={() => navigation.goBack()}
-    >
-      <TouchableOpacity
-        activeOpacity={1}
-        style={MS.sheet}
-        onPress={() => {}}
-      >
-        <View style={MS.handle} />
-        <Text style={MS.sheetTitle}>More</Text>
+  const MS = moreStyles(T);
 
-        {options.length === 0 ? (
-          <Text style={MS.emptyText}>No additional options available.</Text>
-        ) : (
-          options.map((opt) => (
+  return (
+    <Animated.View style={[MS.overlay, { opacity: fadeAnim }]}>
+      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => navigation.goBack()} />
+      <Animated.View style={[MS.sheet, { transform: [{ translateY: slideAnim }] }]}>
+        <View style={MS.handle} />
+        <View style={MS.sheetHeader}>
+          <Text style={MS.sheetTitle}>More</Text>
+          <Text style={MS.sheetSubtitle}>{user?.fullName || user?.username}</Text>
+        </View>
+        <View style={MS.optionsList}>
+          {options.map((opt, i) => (
             <TouchableOpacity
               key={opt.screen}
-              style={MS.option}
-            onPress={() => {
+              style={[MS.option, i < options.length - 1 && MS.optionBorder]}
+              onPress={() => {
                 navigation.goBack();
-                setTimeout(() => navigation.navigate(opt.screen), 300);
+                setTimeout(() => navigation.navigate(opt.screen), 280);
               }}
+              activeOpacity={0.6}
             >
               <View style={[MS.optionIcon, { backgroundColor: opt.bg }]}>
-                <Ionicons name={opt.icon} size={22} color={opt.color} />
+                <Ionicons name={opt.icon} size={20} color={opt.color} />
               </View>
-              <Text style={MS.optionLabel}>{opt.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#8f98a0" />
+              <View style={MS.optionText}>
+                <Text style={MS.optionLabel}>{opt.label}</Text>
+                <Text style={MS.optionSub}>{opt.subtitle}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={15} color={T.textMuted} />
             </TouchableOpacity>
-          ))
-        )}
-      </TouchableOpacity>
-    </TouchableOpacity>
+          ))}
+        </View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 const moreStyles = (T) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: T.bgCard,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     padding: 24,
-    paddingBottom: 40,
-    borderWidth: 1,
+    paddingBottom: 44,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: T.border,
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: T.divider,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
+  sheetHeader: { marginBottom: 20 },
   sheetTitle: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: '700',
     color: T.textPrimary,
-    marginBottom: 16,
+    letterSpacing: -0.8,
+    marginBottom: 2,
+  },
+  sheetSubtitle: { fontSize: 14, color: T.textMuted },
+  optionsList: {
+    backgroundColor: T.bgDeep,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  optionBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: T.divider,
   },
   optionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  optionText: { flex: 1 },
   optionLabel: {
-    flex: 1,
     fontSize: 15,
     fontWeight: '600',
     color: T.textPrimary,
+    marginBottom: 1,
   },
-  emptyText: {
-    color: T.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
+  optionSub: { fontSize: 12, color: T.textMuted },
 });
 function MainTabs() {
-  const insets = useSafeAreaInsets();
   const T = useThemeStore((state) => state);
-  const [pendingCount, setPendingCount] = useState(0);
-
-  useEffect(() => {
-    fetchPendingCount();
-    // Poll every 30 seconds while app is open
-    const interval = setInterval(fetchPendingCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchPendingCount = async () => {
-    try {
-      const res = await client.get('/routing/pending');
-      setPendingCount(res.data?.length ?? 0);
-    } catch (err) {
-      // silently fail — badge just won't show
-    }
-  };
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-      tabBarStyle: {
-          backgroundColor: T.bgCard,
-          borderTopColor: T.border,
-          borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 10,
-          paddingTop: 10,
-        },
-        tabBarActiveTintColor: T.accent,
-        tabBarInactiveTintColor: T.textMuted,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
-       tabBarIcon: ({ focused, color }) => (
-          <TabIcon label={route.name} focused={focused} color={color} />
-        ),
-      })}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+      sceneContainerStyle={{ backgroundColor: T.bgPage, paddingBottom: 96 }}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Documents" component={DocumentsScreen} />
-      
       <Tab.Screen name="Profile" component={ProfileScreen} />
       <Tab.Screen
         name="More"
         component={View}
         listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
-            navigation.navigate('MoreModal');
-          },
+          tabPress: (e) => e.preventDefault(),
         })}
-        options={{ tabBarLabel: 'More' }}
       />
     </Tab.Navigator>
   );
